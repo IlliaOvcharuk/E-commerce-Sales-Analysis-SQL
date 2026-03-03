@@ -1,70 +1,77 @@
-select * from sales;
+/* PROJECT: E-commerce Sales & Customer Behavior Analysis
+Author: Illia Ovcharuk
+Description: SQL script for customer segmentation, category performance, retention tracking, and channel benchmarking.
+*/
 
-ALTER TABLE sales 
-ALTER COLUMN order_id TYPE TEXT; --змінює тип даних 
+-- =================================================================
+-- TASK 1: Customer Classification (Segmentation)
+-- Goal: Identify high-value customers based on order totals.
+-- =================================================================
 
-TRUNCATE TABLE sales; -- Видалити дані залишаючи колонки
-
-/* Завдання 1 Завдання 1: Класифікація клієнтів
-Бізнесу важливо знати, хто приносить гроші.
-Що зробити: Порахуй для кожного клієнта: загальну суму витрат, кількість замовлень та середній чек.
-Додай логіку: Хто витратив більше $5000 як 'Top Spender', від $1000 до $5000 — 'Medium', і решту — 'Small'.
-Сортування: Вивести спочатку найбагатших.*/
-
-with table_1 as (
-	select 
-		customer_id, order_id,
-		sum(quantity * price) as over_sum
-from sales
-group by customer_id, order_id
+WITH order_totals AS (
+    SELECT 
+        customer_id, 
+        order_id,
+        SUM(quantity * price) AS over_sum
+    FROM sales
+    GROUP BY customer_id, order_id
 )
-select customer_id, over_sum, 
-		count(order_id)over(partition by customer_id) as count_orders,
-		round(avg(over_sum)over(partition by customer_id), 2) as avg_check, 
-	case
-		when over_sum > 5000 then 'Top Spender'
-		when over_sum between 1000 and 5000 then 'Medium'
-		else 'Small'
-	end as status_cost
-from table_1
-order by over_sum desc;
+SELECT 
+    customer_id, 
+    over_sum, 
+    COUNT(order_id) OVER(PARTITION BY customer_id) AS count_orders,
+    ROUND(AVG(over_sum) OVER(PARTITION BY customer_id), 2) AS avg_check, 
+    CASE
+        WHEN over_sum > 5000 THEN 'Top Spender'
+        WHEN over_sum BETWEEN 1000 AND 5000 THEN 'Medium'
+        ELSE 'Small'
+    END AS status_cost
+FROM order_totals
+ORDER BY over_sum DESC;
 
+-- =================================================================
+-- TASK 2: Best Selling Categories
+-- Goal: Find the most profitable categories and unique customer reach.
+-- =================================================================
 
-/* Завдання 2 Завдання 2: Аналіз улюблених категорій (The Best Seller)
-Що зробити: Знайди, яка категорія товарів принесла найбільший прибуток.
-Деталізація: Для кожної категорії покажи загальну кількість проданих одиниць товару та кількість унікальних клієнтів, які її купували.
-*/
-Select category, sum(quantity * price) as total_amount, sum(quantity) as total_quantity, count(distinct customer_id) as unique_customer
-from sales
-group by category
-order by sum(quantity * price) desc;
+SELECT 
+    category, 
+    SUM(quantity * price) AS total_amount, 
+    SUM(quantity) AS total_quantity, 
+    COUNT(DISTINCT customer_id) AS unique_customer
+FROM sales
+GROUP BY category
+ORDER BY total_amount DESC;
 
-/*Завдання 3 Аналіз "Повернень" та Лояльності
-Що зробити: Для кожного клієнта вивести список його замовлень, відсортованих за датою.
-Додати колонку days_since_last_order, яка рахує, скільки днів пройшло між поточним та попереднім замовленням клієнта.
-*/
-with table1 as(
-select 
-	customer_id, 
-	order_id, order_date, 
-	lag(order_date)over(partition by customer_id order by order_date) as previous_order
-from sales
-group by order_date,customer_id, order_id
+-- =================================================================
+-- TASK 3: Retention & Loyalty Analysis
+-- Goal: Calculate the number of days between customer orders.
+-- =================================================================
+
+WITH unique_orders AS (
+    SELECT 
+        customer_id, 
+        order_id, 
+        order_date, 
+        LAG(order_date) OVER(PARTITION BY customer_id ORDER BY order_date) AS previous_order
+    FROM sales
+    GROUP BY order_date, customer_id, order_id
 )
-select 
-	customer_id, 
-	order_id, 
-	order_date, 
-	previous_order,
-	order_date - previous_order as days_since_last_order
-from table1
-group by customer_id, order_id, order_date, previous_order
-order by customer_id, order_date;
+SELECT 
+    customer_id, 
+    order_id, 
+    order_date, 
+    previous_order,
+    order_date - previous_order AS days_since_last_order
+FROM unique_orders
+GROUP BY customer_id, order_id, order_date, previous_order
+ORDER BY customer_id, order_date;
 
-/* Завдання 4 Ефективність каналів продажу та пристроїв
-Що зробити: Порахуй середній чек залежно від пристрою та каналу.
-Питання: Чи правда, що замовлення з Desktop дорожчі, ніж з Mobile?
-*/
+-- =================================================================
+-- TASK 4: Marketing Channel & Device Efficiency (Benchmarking)
+-- Goal: Compare segment AOV with general channel/device averages.
+-- =================================================================
+
 WITH base_metrics AS (
     SELECT 
         channel,
